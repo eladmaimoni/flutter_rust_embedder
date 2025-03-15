@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 tracing = "0.1.41"
+tracing-log = "0.2.0"
 tracing-subscriber = { version = "0.3", default-features = false, features = [
     "env-filter",
     "fmt",
 ] }
 wgpu = "24.0.1"
+winit = "0.30.9"
