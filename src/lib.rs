@@ -1,3 +1,4 @@
+use tracing::{debug, info};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -15,6 +16,7 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = WindowAttributes::default();
         self.window = event_loop.create_window(window_attributes).ok();
+        info!("Window created");
     }
 
     fn window_event(
@@ -23,15 +25,22 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if let Some(window) = self.window.as_mut() {
-            // Handle window events here
-            if window.id() == window_id {
-                match event {
-                    WindowEvent::CloseRequested => {
-                        event_loop.exit();
-                    }
-                    _ => {}
-                }
+        // Early return if we don't have a window or if the event is for a different window
+        if self
+            .window
+            .as_ref()
+            .map_or(true, |window| window.id() != window_id)
+        {
+            return;
+        }
+
+        match event {
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+                info!("Window closed");
+            }
+            _ => {
+                debug!("Window event: {:?}", event);
             }
         }
     }
