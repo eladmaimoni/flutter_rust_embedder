@@ -1,3 +1,3 @@
-fn main() {
-    flutter_rust_embedder::run();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    flutter_rust_embedder::run()
 }

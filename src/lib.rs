@@ -9,15 +9,12 @@ mod windowing;
 #[derive(Default, Debug)]
 struct App {
     window: Option<Window>,
-    // window: Option<Box<dyn Window>>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = WindowAttributes::default();
         self.window = event_loop.create_window(window_attributes).ok();
-
-        todo!()
     }
 
     fn window_event(
@@ -26,11 +23,22 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        todo!()
+        if let Some(window) = self.window.as_mut() {
+            // Handle window events here
+            if window.id() == window_id {
+                match event {
+                    WindowEvent::CloseRequested => {
+                        event_loop.exit();
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    logging::init_tracing();
     let event_loop = EventLoop::new()?;
     let mut app = App::default();
 
