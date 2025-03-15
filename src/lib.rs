@@ -1,5 +1,6 @@
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 use winit::application::ApplicationHandler;
+use winit::error;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
@@ -7,16 +8,50 @@ use winit::window::{Window, WindowAttributes, WindowId};
 mod logging;
 mod windowing;
 
+struct WindowGPUState<'window> {
+    surface: wgpu::Surface<'window>,
+}
+
 #[derive(Default, Debug)]
 struct App {
     window: Option<Window>,
 }
 
+impl App {
+    fn new() -> Self {
+        Self::default()
+    }
+}
+impl App {
+    fn on_new_window(&mut self, window: &Window) {
+        info!("New window created");
+
+        let instance_desc = wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            flags: wgpu::InstanceFlags::default(),
+            backend_options: wgpu::BackendOptions::default(),
+        };
+        let instance = wgpu::Instance::new(&instance_desc);
+
+        let surface = instance.create_surface(window).unwrap();
+
+        info!("Surface created");
+    }
+}
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = WindowAttributes::default();
-        self.window = event_loop.create_window(window_attributes).ok();
-        info!("Window created");
+        let window = event_loop.create_window(window_attributes);
+
+        match window {
+            Ok(window) => {
+                self.on_new_window(&window);
+                self.window = Some(window);
+            }
+            Err(error) => {
+                error!("Failed to create window {:?}", error);
+            }
+        }
     }
 
     fn window_event(
