@@ -10,6 +10,8 @@ mod logging;
 mod windowing;
 
 struct Compositor {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
 }
 
@@ -34,7 +36,7 @@ impl AppWindowSession {
 }
 
 impl AppWindowSession {
-    fn new(window: Arc<Window>) -> Result<Self, wgpu::CreateSurfaceError> {
+    async fn new(window: Arc<Window>) -> Self {
         let instance_desc = wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             flags: wgpu::InstanceFlags::default(),
@@ -45,12 +47,25 @@ impl AppWindowSession {
         let surface = instance.create_surface(window.clone()).unwrap();
 
         info!("Surface created");
-        let compositor = Compositor { surface: surface };
 
-        Ok(Self {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions::default())
+            .await
+            .unwrap();
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .await
+            .unwrap();
+
+        let compositor = Compositor {
+            surface: surface,
+            device: device,
+            queue: queue,
+        };
+        Self {
             window: window,
             compositor: compositor,
-        })
+        }
     }
 }
 
@@ -73,7 +88,8 @@ impl ApplicationHandler for App {
         match window {
             Ok(window) => {
                 info!("New window created");
-                self.window_session = Some(AppWindowSession::new(Arc::new(window)).unwrap());
+                let window_session = pollster::block_on(AppWindowSession::new(Arc::new(window)));
+                self.window_session = Some(window_session);
             }
             Err(error) => {
                 error!("Failed to create window {:?}", error);
