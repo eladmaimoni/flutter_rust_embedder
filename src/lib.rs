@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use winit::application::ApplicationHandler;
 use winit::error;
@@ -8,24 +9,32 @@ use winit::window::{Window, WindowAttributes, WindowId};
 mod logging;
 mod windowing;
 
-struct WindowGPUState<'window> {
-    surface: wgpu::Surface<'window>,
+struct Compositor {
+    surface: wgpu::Surface<'static>,
 }
 
-#[derive(Default, Debug)]
-struct App {
-    window: Option<Window>,
+struct AppWindowSession {
+    window: Arc<Window>,
+    compositor: Compositor,
 }
 
-impl App {
-    fn new() -> Self {
-        Self::default()
+impl AppWindowSession {
+    fn handle_window_event(&self, event: WindowEvent) -> bool {
+        match event {
+            WindowEvent::CloseRequested => {
+                info!("Window closed");
+                return true;
+            }
+            _ => {
+                debug!("Window event: {:?}", event);
+            }
+        }
+        false
     }
 }
-impl App {
-    fn on_new_window(&mut self, window: &Window) {
-        info!("New window created");
 
+impl AppWindowSession {
+    fn new(window: Arc<Window>) -> Result<Self, wgpu::CreateSurfaceError> {
         let instance_desc = wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             flags: wgpu::InstanceFlags::default(),
@@ -33,11 +42,29 @@ impl App {
         };
         let instance = wgpu::Instance::new(&instance_desc);
 
-        let surface = instance.create_surface(window).unwrap();
+        let surface = instance.create_surface(window.clone()).unwrap();
 
         info!("Surface created");
+        let compositor = Compositor { surface: surface };
+
+        Ok(Self {
+            window: window,
+            compositor: compositor,
+        })
     }
 }
+
+#[derive(Default)]
+struct App {
+    window_session: Option<AppWindowSession>,
+}
+
+impl App {
+    fn new() -> Self {
+        Self::default()
+    }
+}
+impl App {}
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = WindowAttributes::default();
@@ -45,8 +72,8 @@ impl ApplicationHandler for App {
 
         match window {
             Ok(window) => {
-                self.on_new_window(&window);
-                self.window = Some(window);
+                info!("New window created");
+                self.window_session = Some(AppWindowSession::new(Arc::new(window)).unwrap());
             }
             Err(error) => {
                 error!("Failed to create window {:?}", error);
@@ -60,24 +87,65 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        // Early return if we don't have a window or if the event is for a different window
-        if self
-            .window
-            .as_ref()
-            .map_or(true, |window| window.id() != window_id)
-        {
-            return;
-        }
+        // let Some(window_session) = self.window_session.as_ref().and_then(|window_session| {
+        //     if window_session.window.id() == window_id {
+        //         Some(window_session)
+        //     } else {
+        //         None
+        //     }
+        // }) else {
+        //     return;
+        // };
 
-        match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-                info!("Window closed");
-            }
-            _ => {
-                debug!("Window event: {:?}", event);
-            }
+        let Some(window_session) = self
+            .window_session
+            .as_ref()
+            .filter(|window_session| window_session.window.id() == window_id)
+        else {
+            return;
+        };
+
+        // let Some(window_session) = self.window_session.as_ref() else {
+        //     return;
+        // };
+        // if self.window_session.as_ref().map_or(true, |window_session| {
+        //     window_session.window.id() != window_id
+        // }) {
+        //     return;
+        // }
+
+        // match event {
+        //     WindowEvent::CloseRequested => {
+        //         event_loop.exit();
+        //         info!("Window closed");
+        //     }
+        //     _ => {
+        //         debug!("Window event: {:?}", event);
+        //     }
+        // }
+        let should_close = window_session.handle_window_event(event);
+
+        if should_close {
+            event_loop.exit();
         }
+        // Early return if we don't have a window or if the event is for a different window
+        // if self
+        //     .window
+        //     .as_ref()
+        //     .map_or(true, |window| window.id() != window_id)
+        // {
+        //     return;
+        // }
+
+        // match event {
+        //     WindowEvent::CloseRequested => {
+        //         event_loop.exit();
+        //         info!("Window closed");
+        //     }
+        //     _ => {
+        //         debug!("Window event: {:?}", event);
+        //     }
+        // }
     }
 }
 
