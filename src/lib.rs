@@ -7,6 +7,8 @@ mod tracing_integration;
 mod windowing;
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let _lib = flutter_embedder::load_flutter_engine(flutter_embedder::FlutterEngineMode::JIT)?;
+
     let event_loop = EventLoop::new()?;
     let mut app = application::App::default();
 
