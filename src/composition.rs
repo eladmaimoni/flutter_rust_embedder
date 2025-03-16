@@ -1,4 +1,4 @@
-use tracing::debug_span;
+use tracing::{debug_span, info_span};
 
 pub struct Compositor {
     device: wgpu::Device,
@@ -28,6 +28,7 @@ impl Compositor {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        let _ = info_span!("resize").entered();
         self.surface_size = new_size;
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -46,7 +47,7 @@ impl Compositor {
     }
 
     pub fn render(&mut self) {
-        debug_span!("render");
+        let _ = debug_span!("render").entered();
         let surface_texture = self
             .surface
             .get_current_texture()

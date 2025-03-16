@@ -14,3 +14,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
 ] }
 wgpu = "24.0.1"
 winit = "0.30.9"
+tracing-perfetto = { git = "https://github.com/eladmaimoni/tracing-perfetto.git", branch = "main" }
+chrono = "0.4.40"
+
+# tracing perfetto straight from github

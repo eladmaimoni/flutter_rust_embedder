@@ -7,7 +7,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 mod composition;
-mod logging;
+mod tracing_integration;
 mod windowing;
 
 use composition::Compositor;
@@ -179,7 +179,7 @@ impl ApplicationHandler for App {
 }
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
-    logging::init_tracing();
+    tracing_integration::init_tracing();
     let event_loop = EventLoop::new()?;
     let mut app = App::default();
 
