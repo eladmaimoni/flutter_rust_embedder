@@ -16,6 +16,7 @@ wgpu = "24.0.1"
 winit = "0.30.9"
 tracing-perfetto = { git = "https://github.com/eladmaimoni/tracing-perfetto.git", branch = "main" }
 chrono = "0.4.40"
+libloading = "0.8.6"
 
 [build-dependencies]
 bindgen = "0.71.1"

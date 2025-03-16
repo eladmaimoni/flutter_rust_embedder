@@ -538,6 +538,7 @@ dependencies = [
  "bindgen",
  "chrono",
  "env_logger",
+ "libloading",
  "pollster",
  "tracing",
  "tracing-log",
