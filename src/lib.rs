@@ -6,33 +6,15 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 
+mod composition;
 mod logging;
 mod windowing;
 
-struct Compositor {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    surface: wgpu::Surface<'static>,
-}
+use composition::Compositor;
 
 struct AppWindowSession {
     window: Arc<Window>,
     compositor: Compositor,
-}
-
-impl AppWindowSession {
-    fn handle_window_event(&self, event: WindowEvent) -> bool {
-        match event {
-            WindowEvent::CloseRequested => {
-                info!("Window closed");
-                return true;
-            }
-            _ => {
-                debug!("Window event: {:?}", event);
-            }
-        }
-        false
-    }
 }
 
 impl AppWindowSession {
@@ -57,15 +39,46 @@ impl AppWindowSession {
             .await
             .unwrap();
 
-        let compositor = Compositor {
-            surface: surface,
-            device: device,
-            queue: queue,
-        };
+        let cap = surface.get_capabilities(&adapter);
+        let surface_format = cap.formats[0];
+
+        let initial_size = window.inner_size();
+
+        let compositor = Compositor::new(device, queue, surface, surface_format, initial_size);
+
+        // let compositor = Compositor {
+        //     surface: surface,
+        //     surface_format: surface_format,
+        //     surface_size: initial_size,
+        //     device: device,
+        //     queue: queue,
+        // };
+
+        window.request_redraw();
+
         Self {
             window: window,
             compositor: compositor,
         }
+    }
+
+    fn handle_window_event(&mut self, event: WindowEvent) -> bool {
+        match event {
+            WindowEvent::CloseRequested => {
+                info!("Window closed");
+                return true;
+            }
+            WindowEvent::Resized(new_size) => {
+                self.compositor.resize(new_size);
+            }
+            WindowEvent::RedrawRequested => {
+                self.compositor.render();
+            }
+            _ => {
+                debug!("Window event: {:?}", event);
+            }
+        }
+        false
     }
 }
 
@@ -115,7 +128,7 @@ impl ApplicationHandler for App {
 
         let Some(window_session) = self
             .window_session
-            .as_ref()
+            .as_mut()
             .filter(|window_session| window_session.window.id() == window_id)
         else {
             return;
