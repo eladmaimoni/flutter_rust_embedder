@@ -3,10 +3,10 @@
 // RUST_LOG=trace cargo run --example simple
 // target based filtering (default target is the module name)
 // RUST_LOG=flutter_rust_embedder=trace,wgpu=info cargo run --example simple
-// RUST_LOG=flutter_rust_embedder=trace,winit=error cargo run --example simple
 // RUST_LOG=error cargo run --example simple
+// RUST_LOG=flutter_rust_embedder=trace,winit=error cargo run --example simple
 
-use tracing::{info, span};
+use tracing::{info, info_span};
 use tracing_perfetto::PerfettoLayer;
 use tracing_subscriber::fmt::format::Format;
 use tracing_subscriber::EnvFilter;
@@ -23,8 +23,8 @@ fn init_subscriber() {
 
     let fmt_layer = fmt::layer()
         .with_writer(std::io::stdout)
-        .event_format(Format::default().with_thread_ids(true))
-        .with_span_events(fmt::format::FmtSpan::FULL);
+        .event_format(Format::default().with_thread_ids(true));
+    // .with_span_events(fmt::format::FmtSpan::ACTIVE);
 
     let env_filter = EnvFilter::from_default_env();
     let subscriber = Registry::default()
@@ -37,6 +37,8 @@ fn init_subscriber() {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     init_subscriber();
+    let _span = info_span!("main").entered();
+    info!("start app");
     // env_logger::init();
     flutter_rust_embedder::run()
 }

@@ -1,8 +1,8 @@
-struct FlutterWindowConfig {
-    initial_width: u32,
-    initial_height: u32,
-    title: String,
-}
+// struct FlutterWindowConfig {
+//     initial_width: u32,
+//     initial_height: u32,
+//     title: String,
+// }
 
 // struct FlutterWindow {
 //     surface: wgpu::Surface,

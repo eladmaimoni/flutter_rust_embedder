@@ -1,11 +1,13 @@
-use tracing::{debug_span, info_span};
+use tracing::instrument;
 
+#[derive(Debug)]
 pub struct Compositor {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
     surface_format: wgpu::TextureFormat,
     surface_size: winit::dpi::PhysicalSize<u32>,
+    present_surface_texture: Option<wgpu::SurfaceTexture>,
 }
 
 impl Compositor {
@@ -22,13 +24,14 @@ impl Compositor {
             surface: surface,
             surface_format: surface_format,
             surface_size: surface_size,
+            present_surface_texture: None,
         };
         instance.resize(surface_size);
         instance
     }
 
+    #[instrument(level = "info", skip(self))]
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        let _ = info_span!("resize").entered();
         self.surface_size = new_size;
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -46,8 +49,8 @@ impl Compositor {
         self.surface.configure(&self.device, &surface_config);
     }
 
+    #[instrument(level = "debug", skip(self))]
     pub fn render(&mut self) {
-        let _ = debug_span!("render").entered();
         let surface_texture = self
             .surface
             .get_current_texture()
@@ -85,6 +88,13 @@ impl Compositor {
 
         self.queue.submit([encoder.finish()]);
 
-        surface_texture.present();
+        self.present_surface_texture = Some(surface_texture);
+        // surface_texture.present();
+    }
+
+    pub fn present(&mut self) {
+        if let Some(surface_texture) = self.present_surface_texture.take() {
+            surface_texture.present();
+        }
     }
 }
