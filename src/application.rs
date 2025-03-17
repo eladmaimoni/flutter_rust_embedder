@@ -2,10 +2,20 @@ use std::sync::Arc;
 use tracing::{debug, error, info, instrument, warn};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::composition::Compositor;
+
+pub struct AppConfig {
+    /// The directory where the flutter assets are located.
+    /// On Windows, this is typically a folder named 'data' with a 'flutter_assets' subfolder.
+    pub asset_dir: std::path::PathBuf,
+    /// The path to the Flutter engine shared library.
+    /// On Windows, this is typically a file named 'flutter_engine.dll'.
+    /// The engine version should match the flutter
+    pub flutter_engine_path: std::path::PathBuf,
+}
 
 #[derive(Debug)]
 struct AppWindowSession {
@@ -82,6 +92,13 @@ impl AppWindowSession {
 #[derive(Default)]
 pub struct App {
     window_session: Option<AppWindowSession>,
+}
+
+impl App {
+    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let event_loop = EventLoop::new()?;
+        event_loop.run_app(self).map_err(Into::into)
+    }
 }
 
 impl ApplicationHandler for App {

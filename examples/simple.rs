@@ -40,5 +40,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _span = info_span!("main").entered();
     info!("start app");
     // env_logger::init();
-    flutter_rust_embedder::run()
+
+    flutter_rust_embedder::application::AppConfig {
+        asset_dir: std::path::PathBuf::from(
+            "C:/workspace/rusty/build/windows/x64/runner/Debug/data",
+        ),
+        flutter_engine_path: std::path::PathBuf::from(
+            "C:/libs/flutter/engine/src/out/host_debug/flutter_engine.dll",
+        ),
+    };
+
+    let mut app = flutter_rust_embedder::application::App::default();
+    app.run()
 }
