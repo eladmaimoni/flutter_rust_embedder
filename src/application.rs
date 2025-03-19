@@ -1,4 +1,9 @@
+// use std::error;
+use std::ffi::CString;
+use std::path::PathBuf;
+// use std::fmt::Error;
 use std::sync::Arc;
+use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -6,6 +11,7 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::composition::Compositor;
+use crate::flutter_embedder;
 
 pub struct AppConfig {
     /// The directory where the flutter assets are located.
@@ -15,6 +21,24 @@ pub struct AppConfig {
     /// On Windows, this is typically a file named 'flutter_engine.dll'.
     /// The engine version should match the flutter
     pub flutter_engine_path: std::path::PathBuf,
+}
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Invalid path: {0}")]
+    InvalidPath(PathBuf),
+
+    #[error("Failed to create C string from path: {0}")]
+    CStringCreation(#[from] std::ffi::NulError),
+
+    #[error("Failed to load Flutter engine: {0}")]
+    FlutterEngineLoad(#[from] std::io::Error),
+
+    #[error("Failed to load Flutter engine: {0}")]
+    FlutterEngineSymbol(#[from] libloading::Error),
+
+    #[error("Failed to start event loop: {0}")]
+    EventLoop(#[from] winit::error::EventLoopError),
 }
 
 #[derive(Debug)]
@@ -89,15 +113,44 @@ impl AppWindowSession {
     }
 }
 
-#[derive(Default)]
 pub struct App {
+    config: AppConfig,
     window_session: Option<AppWindowSession>,
 }
 
 impl App {
-    pub fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn new(config: AppConfig) -> Self {
+        Self {
+            config: config,
+            window_session: None,
+        }
+    }
+
+    pub fn run(&mut self) -> Result<(), AppError> {
+        let mut project_args = flutter_embedder::FlutterProjectArgs::default();
+
+        let assets_path = self.config.asset_dir.join("flutter_assets");
+        let icu_data_path = self.config.asset_dir.join("icudtl.dat");
+
+        if !assets_path.exists() {
+            error!("Assets path does not exist: {:?}", assets_path);
+            return Err(AppError::InvalidPath(assets_path));
+        }
+
+        if !icu_data_path.exists() {
+            error!("ICU data path does not exist: {:?}", icu_data_path);
+            return Err(AppError::InvalidPath(icu_data_path));
+        }
+
+        // let asset_path_c = CString::new(assets_path.to_str().ok_or_else(err)
+
+        // project_args.struct_size =
+        //     std::mem::size_of::<flutter_embedder::FlutterProjectArgs>() as usize;
+        // project_args.assets_path = assets_path.as_ptr();
+        // project_args.icu_data_path = icu_data_path.as_ptr();
         let event_loop = EventLoop::new()?;
-        event_loop.run_app(self).map_err(Into::into)
+        event_loop.run_app(self)?;
+        Ok(())
     }
 }
 

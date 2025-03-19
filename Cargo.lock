@@ -540,6 +540,7 @@ dependencies = [
  "env_logger",
  "libloading",
  "pollster",
+ "thiserror 2.0.12",
  "tracing",
  "tracing-log",
  "tracing-perfetto",

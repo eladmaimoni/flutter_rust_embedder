@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("start app");
     // env_logger::init();
 
-    flutter_rust_embedder::application::AppConfig {
+    let app_config = flutter_rust_embedder::application::AppConfig {
         asset_dir: std::path::PathBuf::from(
             "C:/workspace/rusty/build/windows/x64/runner/Debug/data",
         ),
@@ -50,6 +50,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     };
 
-    let mut app = flutter_rust_embedder::application::App::default();
+    let mut app = flutter_rust_embedder::application::App::new(app_config);
     app.run()
 }
