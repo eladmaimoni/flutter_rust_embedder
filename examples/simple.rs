@@ -51,6 +51,7 @@ fn main() -> Result<(), AppError> {
         ),
     };
 
-    let mut app = flutter_rust_embedder::application::App::new(app_config);
+    let mut app = flutter_rust_embedder::application::App::new(app_config)?;
+    app.initialize()?;
     app.run()
 }
