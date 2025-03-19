@@ -1,7 +1,9 @@
+use core::error;
 // use std::error;
 use std::ffi::CString;
 use std::path::PathBuf;
 // use std::fmt::Error;
+use libloading::Library;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
@@ -25,8 +27,8 @@ pub struct AppConfig {
 
 #[derive(Error, Debug)]
 pub enum AppError {
-    #[error("Invalid path: {0}")]
-    InvalidPath(PathBuf),
+    #[error("Path not found path: {0}")]
+    PathNoFound(PathBuf),
 
     #[error("Failed to create C string from path: {0}")]
     CStringCreation(#[from] std::ffi::NulError),
@@ -115,6 +117,8 @@ impl AppWindowSession {
 
 pub struct App {
     config: AppConfig,
+    flutter_engine_lib: Option<Library>,
+    engine: flutter_embedder::FlutterEngineProcTable,
     window_session: Option<AppWindowSession>,
 }
 
@@ -122,26 +126,71 @@ impl App {
     pub fn new(config: AppConfig) -> Self {
         Self {
             config: config,
+            flutter_engine_lib: None,
+            engine: flutter_embedder::FlutterEngineProcTable::default(),
             window_session: None,
         }
     }
 
     pub fn run(&mut self) -> Result<(), AppError> {
-        let mut project_args = flutter_embedder::FlutterProjectArgs::default();
+        use flutter_embedder::*;
+        if !self.config.flutter_engine_path.exists() {
+            error!(
+                "Engine not found at path: {}",
+                self.config.flutter_engine_path.display()
+            );
+            return Err(AppError::PathNoFound(
+                self.config.flutter_engine_path.clone(),
+            ));
+        }
 
+        let engine_lib = unsafe { Library::new(&self.config.flutter_engine_path)? };
+        let flutter_engine_get_proc_addresses = unsafe {
+            engine_lib.get::<fn(*mut FlutterEngineProcTable) -> FlutterEngineResult>(
+                b"FlutterEngineGetProcAddresses\0",
+            )?
+        };
+        self.engine.struct_size = std::mem::size_of::<flutter_embedder::FlutterEngineProcTable>();
+        let res = flutter_engine_get_proc_addresses(&mut self.engine as *mut _ as _);
+        self.flutter_engine_lib = Some(engine_lib);
+        let mut project_args = flutter_embedder::FlutterProjectArgs::default();
+        let mut render_config = flutter_embedder::FlutterRendererConfig::default();
         let assets_path = self.config.asset_dir.join("flutter_assets");
         let icu_data_path = self.config.asset_dir.join("icudtl.dat");
 
         if !assets_path.exists() {
             error!("Assets path does not exist: {:?}", assets_path);
-            return Err(AppError::InvalidPath(assets_path));
+            return Err(AppError::PathNoFound(assets_path));
         }
 
         if !icu_data_path.exists() {
             error!("ICU data path does not exist: {:?}", icu_data_path);
-            return Err(AppError::InvalidPath(icu_data_path));
+            return Err(AppError::PathNoFound(icu_data_path));
         }
+        let mut engine_handle: FlutterEngine = std::ptr::null_mut();
 
+        if let Some(initialize) = self.engine.Initialize {
+            let res = unsafe {
+                initialize(
+                    FLUTTER_ENGINE_VERSION as usize,
+                    &mut render_config as _,
+                    &mut project_args as _,
+                    self as *const _ as _,
+                    &mut engine_handle as _,
+                )
+            };
+            info!("FlutterEngineInitialize returned: {}", res);
+        } else {
+            error!("FlutterEngineInitialize not found");
+        }
+        // self.engine.Initialize(
+        //     FLUTTER_ENGINE_VERSION as usize,
+        //     &mut render_config as _,
+        //     &mut project_args as _,
+        //     self as *const _ as _,
+        //     &mut engine_handle as _,
+        // )
+        // info!("FlutterEngineInitialize returned: {}", res);
         // let asset_path_c = CString::new(assets_path.to_str().ok_or_else(err)
 
         // project_args.struct_size =

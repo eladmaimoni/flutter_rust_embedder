@@ -6,6 +6,7 @@
 // RUST_LOG=error cargo run --example simple
 // RUST_LOG=flutter_rust_embedder=trace,winit=error cargo run --example simple
 
+use flutter_rust_embedder::application::AppError;
 use tracing::{info, info_span};
 use tracing_perfetto::PerfettoLayer;
 use tracing_subscriber::fmt::format::Format;
@@ -35,7 +36,7 @@ fn init_subscriber() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), AppError> {
     init_subscriber();
     let _span = info_span!("main").entered();
     info!("start app");
