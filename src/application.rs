@@ -55,54 +55,69 @@ struct AppWindowSession {
     window: Arc<Window>,
     compositor: Compositor,
 }
+
+struct RawVkInstance {
+    instance: *mut ::core::ffi::c_void,
+    version: i32,
+    extensions: Vec<CString>,
+}
+
+struct RawVkDeviceAndQueue {
+    device: *mut ::core::ffi::c_void,
+    physical_device: *mut ::core::ffi::c_void,
+    queue: *mut ::core::ffi::c_void,
+    queue_family_index: u32,
+    extensions: Vec<CString>,
+}
+
 //-> (*const std::ffi::c_void, u32, Vec<CString>)
-fn extract_raw_vk_instance(
-    instance: &wgpu::Instance,
-) -> Option<(*mut ::core::ffi::c_void, i32, Vec<CString>)> {
+fn extract_raw_vk_instance(instance: &wgpu::Instance) -> Option<RawVkInstance> {
     let res = unsafe {
-        instance.as_hal::<wgpu_hal::api::Vulkan>().map(
-            |instance| -> (*mut ::core::ffi::c_void, i32, Vec<CString>) {
+        instance
+            .as_hal::<wgpu_hal::api::Vulkan>()
+            .map(|instance| -> RawVkInstance {
                 let raw_instance = instance.shared_instance().raw_instance();
                 let raw_handle = raw_instance.handle().as_raw();
                 let raw_void = raw_handle as *mut ::core::ffi::c_void;
 
-                let extentions = instance
+                let extensions = instance
                     .shared_instance()
                     .extensions()
                     .into_iter()
                     .map(|&s| s.to_owned())
                     .collect::<Vec<CString>>();
 
-                (raw_void, 0, extentions)
-            },
-        )
+                RawVkInstance {
+                    instance: raw_void,
+                    version: 0,
+                    extensions: extensions,
+                }
+            })
     };
     res
 }
 
-fn extract_raw_vk_device(device: &wgpu::Device) -> Option<bool> {
-    let res = unsafe {
-        device.as_hal::<wgpu_hal::api::Vulkan, _, Option<bool>>(|device| {
-            let res1 = device.map(|device| {
-                // let raw_device = device.shared_device().raw_device();
-                // let raw_handle = raw_device.handle().as_raw();
-                // let raw_void = raw_handle as *mut ::core::ffi::c_void;
-
-                // let extentions = device
-                //     .shared_device()
-                //     .extensions()
-                //     .into_iter()
-                //     .map(|&s| s.to_owned())
-                //     .collect::<Vec<CString>();
-
-                // (raw_void, 0, extentions)
-                true
-            });
-
-            res1
+fn extract_raw_vk_device(device: &wgpu::Device) -> Option<RawVkDeviceAndQueue> {
+    unsafe {
+        device.as_hal::<wgpu_hal::api::Vulkan, _, Option<RawVkDeviceAndQueue>>(|device| {
+            device.map(|device| {
+                let extensions = device
+                    .enabled_device_extensions()
+                    .into_iter()
+                    .map(|&s| s.to_owned())
+                    .collect::<Vec<CString>>();
+                // (raw_void, 0, extensions)
+                RawVkDeviceAndQueue {
+                    device: device.raw_device().handle().as_raw() as *mut ::core::ffi::c_void,
+                    physical_device: device.raw_physical_device().as_raw()
+                        as *mut ::core::ffi::c_void,
+                    queue: device.raw_queue().as_raw() as *mut ::core::ffi::c_void,
+                    queue_family_index: device.queue_family_index(),
+                    extensions: extensions,
+                }
+            })
         })
-    };
-    res
+    }
 }
 
 impl AppWindowSession {
