@@ -1,3 +1,6 @@
+use crate::flutter_embedder::{
+    FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
+};
 use tracing::instrument;
 
 #[derive(Debug)]
@@ -8,6 +11,10 @@ pub struct Compositor {
     surface_format: wgpu::TextureFormat,
     surface_size: winit::dpi::PhysicalSize<u32>,
     present_surface_texture: Option<wgpu::SurfaceTexture>,
+}
+
+fn as_void_ptr<T>(mut_ref: &mut T) -> *mut ::core::ffi::c_void {
+    mut_ref as *mut T as *mut ::core::ffi::c_void
 }
 
 impl Compositor {
@@ -96,5 +103,53 @@ impl Compositor {
         if let Some(surface_texture) = self.present_surface_texture.take() {
             surface_texture.present();
         }
+    }
+
+    pub fn get_flutter_compositor(&mut self) -> FlutterCompositor {
+        FlutterCompositor {
+            struct_size: size_of::<FlutterCompositor>(),
+            user_data: self as *mut Compositor as *mut ::core::ffi::c_void,
+            create_backing_store_callback: Some(Self::create_backing_store_callback),
+            collect_backing_store_callback: Some(Self::collect_backing_store_callback),
+            present_layers_callback: Some(Self::present_layers_callback),
+            present_view_callback: None,
+            avoid_backing_store_cache: false,
+        }
+    }
+
+    // pub get_flutter_rendering_config(&mut self) -> FlutterRenderingConfig {
+    //     FlutterRenderingConfig {
+    //         struct_size: size_of::<FlutterRenderingConfig>(),
+    //         user_data: self as *mut Compositor as *mut ::core::ffi::c_void,
+    //         on_present_callback: Some(Self::on_present_callback),
+    //         on_raster_thread_callback: None,
+    //         on_gpu_thread_callback: None,
+    //     }
+    // }
+
+    extern "C" fn present_layers_callback(
+        layers: *mut *const FlutterLayer,
+        layers_count: usize,
+        user_data: *mut ::core::ffi::c_void,
+    ) -> bool {
+        true
+    }
+
+    extern "C" fn create_backing_store_callback(
+        config: *const FlutterBackingStoreConfig,
+        backing_store_out: *mut FlutterBackingStore,
+        user_data: *mut ::core::ffi::c_void,
+    ) -> bool {
+        let compositor = unsafe { &*(user_data as *const Compositor) };
+
+        // return null for now
+        true
+    }
+
+    extern "C" fn collect_backing_store_callback(
+        renderer: *const FlutterBackingStore,
+        user_data: *mut ::core::ffi::c_void,
+    ) -> bool {
+        true
     }
 }

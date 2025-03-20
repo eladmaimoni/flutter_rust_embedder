@@ -236,6 +236,23 @@ impl App {
         event_loop.run_app(self)?;
         Ok(())
     }
+
+    extern "C" fn platform_message_callback(
+        message: *const FlutterPlatformMessage,
+        user_data: *mut std::ffi::c_void,
+    ) {
+        let app = user_data as *mut App;
+        let message = unsafe { &*message };
+        unsafe {
+            if let Some(app) = app.as_mut() {
+                app.handle_platform_message(message);
+            }
+        }
+    }
+
+    fn handle_platform_message(&mut self, message: &FlutterPlatformMessage) {
+        info!("Platform message received: {:?}", message);
+    }
 }
 
 impl ApplicationHandler for App {
