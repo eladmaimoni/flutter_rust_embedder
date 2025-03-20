@@ -1,5 +1,6 @@
 use crate::flutter_embedder::{
     FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
+    FlutterRendererConfig,
 };
 use tracing::instrument;
 
@@ -33,6 +34,7 @@ impl Compositor {
             surface_size: surface_size,
             present_surface_texture: None,
         };
+
         instance.resize(surface_size);
         instance
     }
@@ -108,7 +110,7 @@ impl Compositor {
     pub fn get_flutter_compositor(&mut self) -> FlutterCompositor {
         FlutterCompositor {
             struct_size: size_of::<FlutterCompositor>(),
-            user_data: self as *mut Compositor as *mut ::core::ffi::c_void,
+            user_data: as_void_ptr(self),
             create_backing_store_callback: Some(Self::create_backing_store_callback),
             collect_backing_store_callback: Some(Self::collect_backing_store_callback),
             present_layers_callback: Some(Self::present_layers_callback),
@@ -116,16 +118,6 @@ impl Compositor {
             avoid_backing_store_cache: false,
         }
     }
-
-    // pub get_flutter_rendering_config(&mut self) -> FlutterRenderingConfig {
-    //     FlutterRenderingConfig {
-    //         struct_size: size_of::<FlutterRenderingConfig>(),
-    //         user_data: self as *mut Compositor as *mut ::core::ffi::c_void,
-    //         on_present_callback: Some(Self::on_present_callback),
-    //         on_raster_thread_callback: None,
-    //         on_gpu_thread_callback: None,
-    //     }
-    // }
 
     extern "C" fn present_layers_callback(
         layers: *mut *const FlutterLayer,

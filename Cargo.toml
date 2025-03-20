@@ -18,6 +18,8 @@ tracing-perfetto = { git = "https://github.com/eladmaimoni/tracing-perfetto.git"
 chrono = "0.4.40"
 libloading = "0.8.6"
 thiserror = "2.0.12"
+wgpu-hal = "24.0.2"
+ash = "0.38.0"
 
 [build-dependencies]
 bindgen = "0.71.1"

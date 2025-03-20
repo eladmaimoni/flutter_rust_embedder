@@ -5,6 +5,7 @@ use std::path::PathBuf;
 // use std::fmt::Error;
 use crate::composition::Compositor;
 use crate::flutter_embedder;
+use ash::vk::Handle;
 use flutter_embedder::*;
 use libloading::Library;
 use std::sync::Arc;
@@ -54,11 +55,35 @@ struct AppWindowSession {
     window: Arc<Window>,
     compositor: Compositor,
 }
+//-> (*const std::ffi::c_void, u32, Vec<CString>)
+fn extract_raw_vk_instance(
+    instance: &wgpu::Instance,
+) -> Option<(*mut ::core::ffi::c_void, i32, Vec<CString>)> {
+    let res = unsafe {
+        instance.as_hal::<wgpu_hal::api::Vulkan>().map(
+            |instance| -> (*mut ::core::ffi::c_void, i32, Vec<CString>) {
+                let raw_instance = instance.shared_instance().raw_instance();
+                let raw_handle = raw_instance.handle().as_raw();
+                let raw_void = raw_handle as *mut ::core::ffi::c_void;
+
+                let extentions = instance
+                    .shared_instance()
+                    .extensions()
+                    .into_iter()
+                    .map(|&s| s.to_owned())
+                    .collect::<Vec<CString>>();
+
+                (raw_void, 0, extentions)
+            },
+        )
+    };
+    res
+}
 
 impl AppWindowSession {
     async fn new(window: Arc<Window>) -> Self {
         let instance_desc = wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::VULKAN | wgpu::Backends::METAL,
             flags: wgpu::InstanceFlags::default(),
             backend_options: wgpu::BackendOptions::default(),
         };
