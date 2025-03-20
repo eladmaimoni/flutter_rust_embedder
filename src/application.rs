@@ -80,6 +80,31 @@ fn extract_raw_vk_instance(
     res
 }
 
+fn extract_raw_vk_device(device: &wgpu::Device) -> Option<bool> {
+    let res = unsafe {
+        device.as_hal::<wgpu_hal::api::Vulkan, _, Option<bool>>(|device| {
+            let res1 = device.map(|device| {
+                // let raw_device = device.shared_device().raw_device();
+                // let raw_handle = raw_device.handle().as_raw();
+                // let raw_void = raw_handle as *mut ::core::ffi::c_void;
+
+                // let extentions = device
+                //     .shared_device()
+                //     .extensions()
+                //     .into_iter()
+                //     .map(|&s| s.to_owned())
+                //     .collect::<Vec<CString>();
+
+                // (raw_void, 0, extentions)
+                true
+            });
+
+            res1
+        })
+    };
+    res
+}
+
 impl AppWindowSession {
     async fn new(window: Arc<Window>) -> Self {
         let instance_desc = wgpu::InstanceDescriptor {
