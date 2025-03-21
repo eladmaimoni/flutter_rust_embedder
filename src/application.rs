@@ -208,19 +208,19 @@ impl AppWindowSession {
 
         let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
 
-        let compositor = crate::composition::Compositor::new(
+        let compositor = Box::pin(crate::composition::Compositor::new(
             device,
             queue,
             surface,
             surface_format,
             initial_size,
-        );
+        ));
 
         window.request_redraw();
 
         Self {
             window: window,
-            compositor: Box::pin(compositor),
+            compositor: compositor,
         }
     }
 
