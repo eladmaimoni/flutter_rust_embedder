@@ -6,7 +6,7 @@
 // RUST_LOG=error cargo run --example simple
 // RUST_LOG=flutter_rust_embedder=trace,winit=error cargo run --example simple
 
-use flutter_rust_embedder::application::AppError;
+use flutter_rust_embedder::application::{AppError, GPUContext};
 use tracing::{info, info_span};
 use tracing_perfetto::PerfettoLayer;
 use tracing_subscriber::fmt::format::Format;
@@ -36,7 +36,8 @@ fn init_subscriber() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 }
 
-fn main() -> Result<(), AppError> {
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), AppError> {
     init_subscriber();
     let _span = info_span!("main").entered();
     info!("start app");
@@ -51,7 +52,33 @@ fn main() -> Result<(), AppError> {
         ),
     };
 
-    let mut app = flutter_rust_embedder::application::App::new(app_config)?;
-    app.initialize()?;
+    let instance_desc = wgpu::InstanceDescriptor {
+        backends: wgpu::Backends::VULKAN | wgpu::Backends::METAL,
+        flags: wgpu::InstanceFlags::default(),
+        backend_options: wgpu::BackendOptions::default(),
+    };
+    let instance = wgpu::Instance::new(&instance_desc);
+
+    info!("Surface created");
+
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .await
+        .unwrap();
+    let (device, queue) = adapter
+        .request_device(&wgpu::DeviceDescriptor::default(), None)
+        .await
+        .unwrap();
+
+    let mut app = flutter_rust_embedder::application::App::new(
+        app_config,
+        GPUContext {
+            instance: instance,
+            adapter: adapter,
+            device: device,
+            queue: queue,
+        },
+    );
+    // app.initialize()?;
     app.run()
 }

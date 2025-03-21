@@ -4,7 +4,7 @@ use std::ffi::CString;
 use std::path::PathBuf;
 use std::pin::Pin;
 // use std::fmt::Error;
-use crate::composition::Compositor;
+use crate::composition::{as_void_ptr, Compositor};
 use crate::flutter_embedder;
 use ash::vk::Handle;
 use flutter_embedder::*;
@@ -12,6 +12,7 @@ use libloading::Library;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
+// use wgpu::{Adapter, Instance};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -19,6 +20,15 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 pub type PinBox<T> = Pin<Box<T>>;
 
+#[derive(Clone, Debug)]
+pub struct GPUContext {
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+}
+
+#[derive(Clone, Debug)]
 pub struct AppConfig {
     /// The directory where the flutter assets are located.
     /// On Windows, this is typically a folder named 'data' with a 'flutter_assets' subfolder.
@@ -55,6 +65,10 @@ pub enum AppError {
 
 #[derive(Debug)]
 struct AppWindowSession {
+    config: AppConfig,
+    _flutter_engine_lib: Library,
+    engine: flutter_embedder::FlutterEngineProcTable,
+    engine_handle: FlutterEngine,
     window: Arc<Window>,
     compositor: PinBox<Compositor>,
 }
@@ -180,83 +194,11 @@ fn create_flutter_renderer_config(
 }
 
 impl AppWindowSession {
-    async fn new(window: Arc<Window>) -> Self {
-        let instance_desc = wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN | wgpu::Backends::METAL,
-            flags: wgpu::InstanceFlags::default(),
-            backend_options: wgpu::BackendOptions::default(),
-        };
-        let instance = wgpu::Instance::new(&instance_desc);
-
-        let surface = instance.create_surface(window.clone()).unwrap();
-
-        info!("Surface created");
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions::default())
-            .await
-            .unwrap();
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
-            .await
-            .unwrap();
-
-        let cap = surface.get_capabilities(&adapter);
-        let surface_format = cap.formats[0];
-
-        let initial_size = window.inner_size();
-
-        let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
-
-        let compositor = Box::pin(crate::composition::Compositor::new(
-            device,
-            queue,
-            surface,
-            surface_format,
-            initial_size,
-        ));
-
-        window.request_redraw();
-
-        Self {
-            window: window,
-            compositor: compositor,
-        }
-    }
-
-    #[instrument(level = "trace", skip_all)]
-    fn handle_window_event(&mut self, event: WindowEvent) -> bool {
-        match event {
-            WindowEvent::CloseRequested => {
-                info!("Window closed");
-                return true;
-            }
-            WindowEvent::Resized(new_size) => {
-                self.compositor.as_mut().resize(new_size);
-            }
-            WindowEvent::RedrawRequested => {
-                self.compositor.as_mut().render();
-                self.window.pre_present_notify();
-                self.compositor.as_mut().present();
-            }
-            _ => {
-                debug!("Window event: {:?}", event);
-            }
-        }
-        false
-    }
-}
-
-pub struct App {
-    config: AppConfig,
-    flutter_engine_lib: Library,
-    engine: flutter_embedder::FlutterEngineProcTable,
-    engine_handle: FlutterEngine,
-    window_session: Option<AppWindowSession>,
-}
-
-impl App {
-    pub fn new(config: AppConfig) -> Result<Self, AppError> {
+    fn new(
+        config: AppConfig,
+        window: Arc<Window>,
+        gpu_context: GPUContext,
+    ) -> Result<Self, AppError> {
         let assets_path = config.asset_dir.join("flutter_assets");
         let icu_data_path = config.asset_dir.join("icudtl.dat");
 
@@ -291,16 +233,61 @@ impl App {
             return Err(AppError::FlutterEngineError(res));
         }
 
+        let instance = gpu_context.instance;
+        let device = gpu_context.device;
+        let queue = gpu_context.queue;
+        let surface = instance.create_surface(window.clone()).unwrap();
+
+        let cap = surface.get_capabilities(&gpu_context.adapter);
+        let surface_format = cap.formats[0];
+
+        let initial_size = window.inner_size();
+
+        let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
+
+        let compositor = Box::pin(crate::composition::Compositor::new(
+            device,
+            queue,
+            surface,
+            surface_format,
+            initial_size,
+        ));
+
+        window.request_redraw();
+
         Ok(Self {
             config: config,
-            flutter_engine_lib: engine_lib,
+            window: window,
+            _flutter_engine_lib: engine_lib,
             engine: engine,
             engine_handle: std::ptr::null_mut(),
-            window_session: None,
+            compositor: compositor,
         })
     }
 
-    pub fn initialize(&mut self) -> Result<(), AppError> {
+    #[instrument(level = "trace", skip_all)]
+    fn handle_window_event(&mut self, event: WindowEvent) -> bool {
+        match event {
+            WindowEvent::CloseRequested => {
+                info!("Window closed");
+                return true;
+            }
+            WindowEvent::Resized(new_size) => {
+                self.compositor.as_mut().resize(new_size);
+            }
+            WindowEvent::RedrawRequested => {
+                self.compositor.as_mut().render();
+                self.window.pre_present_notify();
+                self.compositor.as_mut().present();
+            }
+            _ => {
+                debug!("Window event: {:?}", event);
+            }
+        }
+        false
+    }
+
+    pub fn initialize(self: Pin<&mut Self>) -> Result<(), AppError> {
         let asset_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
         let icu_data_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
         let mut project_args = flutter_embedder::FlutterProjectArgs::default();
@@ -329,7 +316,7 @@ impl App {
                     FLUTTER_ENGINE_VERSION as usize,
                     &mut render_config as _,
                     &mut project_args as _,
-                    self as *const _ as _,
+                    as_void_ptr(self.get_unchecked_mut()),
                     &mut engine_handle as _,
                 )
             };
@@ -343,31 +330,11 @@ impl App {
         Ok(())
     }
 
-    pub fn run(&mut self) -> Result<(), AppError> {
-        // self.engine.Initialize(
-        //     FLUTTER_ENGINE_VERSION as usize,
-        //     &mut render_config as _,
-        //     &mut project_args as _,
-        //     self as *const _ as _,
-        //     &mut engine_handle as _,
-        // )
-        // info!("FlutterEngineInitialize returned: {}", res);
-        // let asset_path_c = CString::new(assets_path.to_str().ok_or_else(err)
-
-        // project_args.struct_size =
-        //     std::mem::size_of::<flutter_embedder::FlutterProjectArgs>() as usize;
-        // project_args.assets_path = assets_path.as_ptr();
-        // project_args.icu_data_path = icu_data_path.as_ptr();
-        let event_loop = EventLoop::new()?;
-        event_loop.run_app(self)?;
-        Ok(())
-    }
-
     extern "C" fn platform_message_callback(
         message: *const FlutterPlatformMessage,
         user_data: *mut std::ffi::c_void,
     ) {
-        let app = user_data as *mut App;
+        let app = user_data as *mut AppWindowSession;
         let message = unsafe { &*message };
         unsafe {
             if let Some(app) = app.as_mut() {
@@ -381,6 +348,28 @@ impl App {
     }
 }
 
+pub struct App {
+    config: AppConfig,
+    gpu_context: GPUContext,
+    window_session: Option<PinBox<AppWindowSession>>,
+}
+
+impl App {
+    pub fn new(config: AppConfig, gpu_context: GPUContext) -> Self {
+        Self {
+            config: config,
+            gpu_context: gpu_context,
+            window_session: None,
+        }
+    }
+
+    pub fn run(&mut self) -> Result<(), AppError> {
+        let event_loop = EventLoop::new()?;
+        event_loop.run_app(self)?;
+        Ok(())
+    }
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = WindowAttributes::default();
@@ -389,8 +378,16 @@ impl ApplicationHandler for App {
         match window {
             Ok(window) => {
                 info!("New window created");
-                let window_session = pollster::block_on(AppWindowSession::new(Arc::new(window)));
-                self.window_session = Some(window_session);
+                let window_session = AppWindowSession::new(
+                    self.config.clone(),
+                    Arc::new(window),
+                    self.gpu_context.clone(),
+                )
+                .unwrap();
+
+                let pinned_session = Box::pin(window_session);
+
+                self.window_session = Some(pinned_session);
             }
             Err(error) => {
                 error!("Failed to create window {:?}", error);
