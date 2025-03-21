@@ -2,6 +2,7 @@ use core::error;
 // use std::error;
 use std::ffi::CString;
 use std::path::PathBuf;
+use std::pin::Pin;
 // use std::fmt::Error;
 use crate::composition::Compositor;
 use crate::flutter_embedder;
@@ -15,6 +16,8 @@ use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowAttributes, WindowId};
+
+pub type PinBox<T> = Pin<Box<T>>;
 
 pub struct AppConfig {
     /// The directory where the flutter assets are located.
@@ -53,12 +56,12 @@ pub enum AppError {
 #[derive(Debug)]
 struct AppWindowSession {
     window: Arc<Window>,
-    compositor: Compositor,
+    compositor: PinBox<Compositor>,
 }
 
 struct RawVkInstance {
     instance: *mut ::core::ffi::c_void,
-    version: i32,
+    version: u32,
     extensions: Vec<CString>,
 }
 
@@ -120,6 +123,62 @@ fn extract_raw_vk_device(device: &wgpu::Device) -> Option<RawVkDeviceAndQueue> {
     }
 }
 
+fn create_flutter_renderer_config(
+    instance: &wgpu::Instance,
+    device: &wgpu::Device,
+) -> FlutterRendererConfig {
+    let raw_instance = extract_raw_vk_instance(&instance).unwrap();
+    let raw_device = extract_raw_vk_device(&device).unwrap();
+
+    let mut enabled_device_extensions: Vec<*const std::ffi::c_char> = raw_device
+        .extensions
+        .iter()
+        .map(|ext| ext.as_ptr())
+        .collect();
+    let mut enabled_instance_extensions: Vec<*const std::ffi::c_char> = raw_instance
+        .extensions
+        .iter()
+        .map(|ext| ext.as_ptr())
+        .collect();
+
+    // let vulkan_config = FlutterVulkanRendererConfig {
+    //     struct_size: size_of::<FlutterVulkanRendererConfig>(),
+    //     version: raw_instance.version,
+    //     instance: raw_instance.instance,
+    //     physical_device: raw_device.physical_device,
+    //     device: raw_device.device,
+    //     queue_family_index: raw_device.queue_family_index,
+    //     queue: raw_device.queue,
+    //     enabled_instance_extension_count: raw_instance.extensions.len(),
+    //     enabled_instance_extensions: enabled_instance_extensions.as_mut_ptr(),
+    //     enabled_device_extension_count: raw_device.extensions.len(),
+    //     enabled_device_extensions: enabled_device_extensions.as_mut_ptr(),
+    //     get_instance_proc_address_callback: None,
+    //     get_next_image_callback: None,
+    //     present_image_callback: None,
+    // };
+
+    let mut config = FlutterRendererConfig::default();
+    config.type_ = FlutterRendererType_kVulkan;
+    let vk = unsafe { config.__bindgen_anon_1.vulkan.as_mut() };
+    vk.struct_size = size_of::<FlutterVulkanRendererConfig>();
+    vk.version = raw_instance.version;
+    vk.instance = raw_instance.instance;
+    vk.physical_device = raw_device.physical_device;
+    vk.device = raw_device.device;
+    vk.queue_family_index = raw_device.queue_family_index;
+    vk.queue = raw_device.queue;
+    vk.enabled_instance_extension_count = raw_instance.extensions.len();
+    vk.enabled_instance_extensions = enabled_instance_extensions.as_mut_ptr();
+    vk.enabled_device_extension_count = raw_device.extensions.len();
+    vk.enabled_device_extensions = enabled_device_extensions.as_mut_ptr();
+    vk.get_instance_proc_address_callback = None;
+    vk.get_next_image_callback = None;
+    vk.present_image_callback = None;
+
+    config
+}
+
 impl AppWindowSession {
     async fn new(window: Arc<Window>) -> Self {
         let instance_desc = wgpu::InstanceDescriptor {
@@ -147,6 +206,8 @@ impl AppWindowSession {
 
         let initial_size = window.inner_size();
 
+        let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
+
         let compositor = crate::composition::Compositor::new(
             device,
             queue,
@@ -159,7 +220,7 @@ impl AppWindowSession {
 
         Self {
             window: window,
-            compositor: compositor,
+            compositor: Box::pin(compositor),
         }
     }
 
@@ -171,12 +232,12 @@ impl AppWindowSession {
                 return true;
             }
             WindowEvent::Resized(new_size) => {
-                self.compositor.resize(new_size);
+                self.compositor.as_mut().resize(new_size);
             }
             WindowEvent::RedrawRequested => {
-                self.compositor.render();
+                self.compositor.as_mut().render();
                 self.window.pre_present_notify();
-                self.compositor.present();
+                self.compositor.as_mut().present();
             }
             _ => {
                 debug!("Window event: {:?}", event);

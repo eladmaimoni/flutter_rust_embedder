@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use crate::flutter_embedder::{
     FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
     FlutterRendererConfig,
@@ -5,7 +7,7 @@ use crate::flutter_embedder::{
 use tracing::instrument;
 
 #[derive(Debug)]
-pub struct Compositor {
+struct CompositorInner {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
@@ -14,33 +16,8 @@ pub struct Compositor {
     present_surface_texture: Option<wgpu::SurfaceTexture>,
 }
 
-fn as_void_ptr<T>(mut_ref: &mut T) -> *mut ::core::ffi::c_void {
-    mut_ref as *mut T as *mut ::core::ffi::c_void
-}
-
-impl Compositor {
-    pub fn new(
-        device: wgpu::Device,
-        queue: wgpu::Queue,
-        surface: wgpu::Surface<'static>,
-        surface_format: wgpu::TextureFormat,
-        surface_size: winit::dpi::PhysicalSize<u32>,
-    ) -> Self {
-        let mut instance = Self {
-            device: device,
-            queue: queue,
-            surface: surface,
-            surface_format: surface_format,
-            surface_size: surface_size,
-            present_surface_texture: None,
-        };
-
-        instance.resize(surface_size);
-        instance
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+impl CompositorInner {
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.surface_size = new_size;
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -58,8 +35,7 @@ impl Compositor {
         self.surface.configure(&self.device, &surface_config);
     }
 
-    #[instrument(level = "debug", skip(self))]
-    pub fn render(&mut self) {
+    fn render(&mut self) {
         let surface_texture = self
             .surface
             .get_current_texture()
@@ -98,12 +74,66 @@ impl Compositor {
         self.queue.submit([encoder.finish()]);
 
         self.present_surface_texture = Some(surface_texture);
-        // surface_texture.present();
     }
 
-    pub fn present(&mut self) {
+    fn present(&mut self) {
         if let Some(surface_texture) = self.present_surface_texture.take() {
             surface_texture.present();
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Compositor {
+    inner: CompositorInner,
+    _marker: std::marker::PhantomPinned,
+}
+
+fn as_void_ptr<T>(mut_ref: &mut T) -> *mut ::core::ffi::c_void {
+    mut_ref as *mut T as *mut ::core::ffi::c_void
+}
+
+impl Compositor {
+    pub fn new(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        surface: wgpu::Surface<'static>,
+        surface_format: wgpu::TextureFormat,
+        surface_size: winit::dpi::PhysicalSize<u32>,
+    ) -> Self {
+        let mut inner = CompositorInner {
+            device: device,
+            queue: queue,
+            surface: surface,
+            surface_format: surface_format,
+            surface_size: surface_size,
+            present_surface_texture: None,
+        };
+
+        inner.resize(surface_size);
+        Self {
+            inner: inner,
+            _marker: std::marker::PhantomPinned,
+        }
+    }
+
+    #[instrument(level = "info", skip(self))]
+    pub fn resize(self: Pin<&mut Self>, new_size: winit::dpi::PhysicalSize<u32>) {
+        unsafe {
+            self.get_unchecked_mut().inner.resize(new_size);
+        }
+    }
+
+    #[instrument(level = "debug", skip(self))]
+    pub fn render(self: Pin<&mut Self>) {
+        unsafe {
+            self.get_unchecked_mut().inner.render();
+        }
+    }
+
+    pub fn present(self: Pin<&mut Self>) {
+        unsafe {
+            self.get_unchecked_mut().inner.present();
         }
     }
 
