@@ -137,10 +137,10 @@ impl Compositor {
         }
     }
 
-    pub fn get_flutter_compositor(&mut self) -> FlutterCompositor {
+    pub fn get_flutter_compositor(self: Pin<&mut Self>) -> FlutterCompositor {
         FlutterCompositor {
             struct_size: size_of::<FlutterCompositor>(),
-            user_data: as_void_ptr(self),
+            user_data: as_void_ptr(unsafe { self.get_unchecked_mut() }),
             create_backing_store_callback: Some(Self::create_backing_store_callback),
             collect_backing_store_callback: Some(Self::collect_backing_store_callback),
             present_layers_callback: Some(Self::present_layers_callback),
@@ -164,7 +164,6 @@ impl Compositor {
     ) -> bool {
         let compositor = unsafe { &*(user_data as *const Compositor) };
 
-        // return null for now
         true
     }
 
