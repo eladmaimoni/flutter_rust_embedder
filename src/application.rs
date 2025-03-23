@@ -4,8 +4,9 @@ use std::ffi::CString;
 use std::path::PathBuf;
 use std::pin::Pin;
 // use std::fmt::Error;
-use crate::composition::{as_void_ptr, Compositor};
+use crate::composition::Compositor;
 use crate::flutter_embedder;
+use crate::utils::as_void_ptr;
 use ash::vk::Handle;
 use flutter_embedder::*;
 use libloading::Library;
@@ -70,7 +71,7 @@ struct AppWindowSession {
     engine: flutter_embedder::FlutterEngineProcTable,
     engine_handle: FlutterEngine,
     window: Arc<Window>,
-    compositor: PinBox<Compositor>,
+    compositor: Compositor,
 }
 
 struct RawVkInstance {
@@ -245,14 +246,6 @@ impl AppWindowSession {
 
         let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
 
-        let compositor = Box::pin(crate::composition::Compositor::new(
-            device,
-            queue,
-            surface,
-            surface_format,
-            initial_size,
-        ));
-
         window.request_redraw();
 
         Ok(Self {
@@ -261,7 +254,13 @@ impl AppWindowSession {
             _flutter_engine_lib: engine_lib,
             engine: engine,
             engine_handle: std::ptr::null_mut(),
-            compositor: compositor,
+            compositor: crate::composition::Compositor::new(
+                device,
+                queue,
+                surface,
+                surface_format,
+                initial_size,
+            ),
         })
     }
 
@@ -273,12 +272,12 @@ impl AppWindowSession {
                 return true;
             }
             WindowEvent::Resized(new_size) => {
-                self.compositor.as_mut().resize(new_size);
+                self.compositor.resize(new_size);
             }
             WindowEvent::RedrawRequested => {
-                self.compositor.as_mut().render();
+                self.compositor.render();
                 self.window.pre_present_notify();
-                self.compositor.as_mut().present();
+                self.compositor.present();
             }
             _ => {
                 debug!("Window event: {:?}", event);
@@ -351,7 +350,7 @@ impl AppWindowSession {
 pub struct App {
     config: AppConfig,
     gpu_context: GPUContext,
-    window_session: Option<PinBox<AppWindowSession>>,
+    window_session: Option<Box<AppWindowSession>>,
 }
 
 impl App {
@@ -385,7 +384,7 @@ impl ApplicationHandler for App {
                 )
                 .unwrap();
 
-                let pinned_session = Box::pin(window_session);
+                let pinned_session = Box::new(window_session);
 
                 self.window_session = Some(pinned_session);
             }

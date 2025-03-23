@@ -1,13 +1,21 @@
 use std::pin::Pin;
 
-use crate::flutter_embedder::{
-    FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
-    FlutterRendererConfig,
+use crate::{
+    flutter_embedder::{
+        FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
+        FlutterRendererConfig,
+    },
+    utils::as_void_ptr,
 };
 use tracing::instrument;
 
 #[derive(Debug)]
-struct CompositorInner {
+struct CompositorInner {}
+
+impl CompositorInner {}
+
+#[derive(Debug)]
+pub struct Compositor {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
@@ -16,8 +24,32 @@ struct CompositorInner {
     present_surface_texture: Option<wgpu::SurfaceTexture>,
 }
 
-impl CompositorInner {
-    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+impl Compositor {
+    pub fn new(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        surface: wgpu::Surface<'static>,
+        surface_format: wgpu::TextureFormat,
+        surface_size: winit::dpi::PhysicalSize<u32>,
+    ) -> Self {
+        let mut instance = Compositor {
+            device: device,
+            queue: queue,
+            surface: surface,
+            surface_format: surface_format,
+            surface_size: surface_size,
+            present_surface_texture: None,
+        };
+
+        instance.resize(surface_size);
+        instance
+    }
+
+    #[instrument(level = "info", skip(self))]
+    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width == 0 || new_size.height == 0 {
+            return;
+        }
         self.surface_size = new_size;
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -34,12 +66,12 @@ impl CompositorInner {
 
         self.surface.configure(&self.device, &surface_config);
     }
+    #[instrument(level = "debug", skip(self))]
+    pub fn render(&mut self) {
+        let Ok(surface_texture) = self.surface.get_current_texture() else {
+            return;
+        };
 
-    fn render(&mut self) {
-        let surface_texture = self
-            .surface
-            .get_current_texture()
-            .expect("failed to acquire next swapchain texture");
         let texture_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor {
@@ -76,64 +108,9 @@ impl CompositorInner {
         self.present_surface_texture = Some(surface_texture);
     }
 
-    fn present(&mut self) {
+    pub fn present(&mut self) {
         if let Some(surface_texture) = self.present_surface_texture.take() {
             surface_texture.present();
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Compositor {
-    inner: CompositorInner,
-    _marker: std::marker::PhantomPinned,
-}
-
-pub fn as_void_ptr<T>(mut_ref: &mut T) -> *mut ::core::ffi::c_void {
-    mut_ref as *mut T as *mut ::core::ffi::c_void
-}
-
-impl Compositor {
-    pub fn new(
-        device: wgpu::Device,
-        queue: wgpu::Queue,
-        surface: wgpu::Surface<'static>,
-        surface_format: wgpu::TextureFormat,
-        surface_size: winit::dpi::PhysicalSize<u32>,
-    ) -> Self {
-        let mut inner = CompositorInner {
-            device: device,
-            queue: queue,
-            surface: surface,
-            surface_format: surface_format,
-            surface_size: surface_size,
-            present_surface_texture: None,
-        };
-
-        inner.resize(surface_size);
-        Self {
-            inner: inner,
-            _marker: std::marker::PhantomPinned,
-        }
-    }
-
-    #[instrument(level = "info", skip(self))]
-    pub fn resize(self: Pin<&mut Self>, new_size: winit::dpi::PhysicalSize<u32>) {
-        unsafe {
-            self.get_unchecked_mut().inner.resize(new_size);
-        }
-    }
-
-    #[instrument(level = "debug", skip(self))]
-    pub fn render(self: Pin<&mut Self>) {
-        unsafe {
-            self.get_unchecked_mut().inner.render();
-        }
-    }
-
-    pub fn present(self: Pin<&mut Self>) {
-        unsafe {
-            self.get_unchecked_mut().inner.present();
         }
     }
 
