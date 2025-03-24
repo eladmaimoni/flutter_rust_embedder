@@ -79,6 +79,5 @@ async fn main() -> Result<(), AppError> {
             queue: queue,
         },
     );
-    // app.initialize()?;
     app.run()
 }

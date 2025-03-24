@@ -74,126 +74,6 @@ struct AppWindowSession {
     compositor: Compositor,
 }
 
-struct RawVkInstance {
-    instance: *mut ::core::ffi::c_void,
-    version: u32,
-    extensions: Vec<CString>,
-}
-
-struct RawVkDeviceAndQueue {
-    device: *mut ::core::ffi::c_void,
-    physical_device: *mut ::core::ffi::c_void,
-    queue: *mut ::core::ffi::c_void,
-    queue_family_index: u32,
-    extensions: Vec<CString>,
-}
-
-//-> (*const std::ffi::c_void, u32, Vec<CString>)
-fn extract_raw_vk_instance(instance: &wgpu::Instance) -> Option<RawVkInstance> {
-    let res = unsafe {
-        instance
-            .as_hal::<wgpu_hal::api::Vulkan>()
-            .map(|instance| -> RawVkInstance {
-                let raw_instance = instance.shared_instance().raw_instance();
-                let raw_handle = raw_instance.handle().as_raw();
-                let raw_void = raw_handle as *mut ::core::ffi::c_void;
-
-                let extensions = instance
-                    .shared_instance()
-                    .extensions()
-                    .into_iter()
-                    .map(|&s| s.to_owned())
-                    .collect::<Vec<CString>>();
-
-                RawVkInstance {
-                    instance: raw_void,
-                    version: 0,
-                    extensions: extensions,
-                }
-            })
-    };
-    res
-}
-
-fn extract_raw_vk_device(device: &wgpu::Device) -> Option<RawVkDeviceAndQueue> {
-    unsafe {
-        device.as_hal::<wgpu_hal::api::Vulkan, _, Option<RawVkDeviceAndQueue>>(|device| {
-            device.map(|device| {
-                let extensions = device
-                    .enabled_device_extensions()
-                    .into_iter()
-                    .map(|&s| s.to_owned())
-                    .collect::<Vec<CString>>();
-                // (raw_void, 0, extensions)
-                RawVkDeviceAndQueue {
-                    device: device.raw_device().handle().as_raw() as *mut ::core::ffi::c_void,
-                    physical_device: device.raw_physical_device().as_raw()
-                        as *mut ::core::ffi::c_void,
-                    queue: device.raw_queue().as_raw() as *mut ::core::ffi::c_void,
-                    queue_family_index: device.queue_family_index(),
-                    extensions: extensions,
-                }
-            })
-        })
-    }
-}
-
-fn create_flutter_renderer_config(
-    instance: &wgpu::Instance,
-    device: &wgpu::Device,
-) -> FlutterRendererConfig {
-    let raw_instance = extract_raw_vk_instance(&instance).unwrap();
-    let raw_device = extract_raw_vk_device(&device).unwrap();
-
-    let mut enabled_device_extensions: Vec<*const std::ffi::c_char> = raw_device
-        .extensions
-        .iter()
-        .map(|ext| ext.as_ptr())
-        .collect();
-    let mut enabled_instance_extensions: Vec<*const std::ffi::c_char> = raw_instance
-        .extensions
-        .iter()
-        .map(|ext| ext.as_ptr())
-        .collect();
-
-    // let vulkan_config = FlutterVulkanRendererConfig {
-    //     struct_size: size_of::<FlutterVulkanRendererConfig>(),
-    //     version: raw_instance.version,
-    //     instance: raw_instance.instance,
-    //     physical_device: raw_device.physical_device,
-    //     device: raw_device.device,
-    //     queue_family_index: raw_device.queue_family_index,
-    //     queue: raw_device.queue,
-    //     enabled_instance_extension_count: raw_instance.extensions.len(),
-    //     enabled_instance_extensions: enabled_instance_extensions.as_mut_ptr(),
-    //     enabled_device_extension_count: raw_device.extensions.len(),
-    //     enabled_device_extensions: enabled_device_extensions.as_mut_ptr(),
-    //     get_instance_proc_address_callback: None,
-    //     get_next_image_callback: None,
-    //     present_image_callback: None,
-    // };
-
-    let mut config = FlutterRendererConfig::default();
-    config.type_ = FlutterRendererType_kVulkan;
-    let vk = unsafe { config.__bindgen_anon_1.vulkan.as_mut() };
-    vk.struct_size = size_of::<FlutterVulkanRendererConfig>();
-    vk.version = raw_instance.version;
-    vk.instance = raw_instance.instance;
-    vk.physical_device = raw_device.physical_device;
-    vk.device = raw_device.device;
-    vk.queue_family_index = raw_device.queue_family_index;
-    vk.queue = raw_device.queue;
-    vk.enabled_instance_extension_count = raw_instance.extensions.len();
-    vk.enabled_instance_extensions = enabled_instance_extensions.as_mut_ptr();
-    vk.enabled_device_extension_count = raw_device.extensions.len();
-    vk.enabled_device_extensions = enabled_device_extensions.as_mut_ptr();
-    vk.get_instance_proc_address_callback = None;
-    vk.get_next_image_callback = None;
-    vk.present_image_callback = None;
-
-    config
-}
-
 impl AppWindowSession {
     fn new(
         config: AppConfig,
@@ -244,8 +124,6 @@ impl AppWindowSession {
 
         let initial_size = window.inner_size();
 
-        let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
-
         window.request_redraw();
 
         Ok(Self {
@@ -255,6 +133,7 @@ impl AppWindowSession {
             engine: engine,
             engine_handle: std::ptr::null_mut(),
             compositor: crate::composition::Compositor::new(
+                instance,
                 device,
                 queue,
                 surface,
@@ -286,13 +165,14 @@ impl AppWindowSession {
         false
     }
 
-    pub fn initialize(self: Pin<&mut Self>) -> Result<(), AppError> {
+    pub fn initialize(&mut self) -> Result<(), AppError> {
+        // let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
         let asset_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
         let icu_data_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
         let mut project_args = flutter_embedder::FlutterProjectArgs::default();
         project_args.struct_size = std::mem::size_of::<flutter_embedder::FlutterProjectArgs>();
-        project_args.assets_path = asset_path_str.as_ptr() as _;
-        project_args.icu_data_path = icu_data_path_str.as_ptr() as _;
+        project_args.assets_path = asset_path_str.as_ptr();
+        project_args.icu_data_path = icu_data_path_str.as_ptr();
         project_args.platform_message_callback = None;
         project_args.vm_snapshot_data = std::ptr::null_mut();
         project_args.vm_snapshot_data_size = 0;
@@ -306,7 +186,7 @@ impl AppWindowSession {
         project_args.update_semantics_callback = None;
         project_args.log_message_callback = None;
         let mut render_config = flutter_embedder::FlutterRendererConfig::default();
-
+        // self.compositor.c
         let mut engine_handle: FlutterEngine = std::ptr::null_mut();
 
         if let Some(initialize) = self.engine.Initialize {
@@ -315,7 +195,7 @@ impl AppWindowSession {
                     FLUTTER_ENGINE_VERSION as usize,
                     &mut render_config as _,
                     &mut project_args as _,
-                    as_void_ptr(self.get_unchecked_mut()),
+                    as_void_ptr(self),
                     &mut engine_handle as _,
                 )
             };
