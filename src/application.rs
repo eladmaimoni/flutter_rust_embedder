@@ -166,6 +166,9 @@ impl AppWindowSession {
     }
 
     pub fn initialize(&mut self) -> Result<(), AppError> {
+        let mut render_config = self.compositor.get_flutter_renderer_config();
+        let compositor_config = self.compositor.get_flutter_compositor();
+
         // let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
         let asset_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
         let icu_data_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
@@ -173,7 +176,7 @@ impl AppWindowSession {
         project_args.struct_size = std::mem::size_of::<flutter_embedder::FlutterProjectArgs>();
         project_args.assets_path = asset_path_str.as_ptr();
         project_args.icu_data_path = icu_data_path_str.as_ptr();
-        project_args.platform_message_callback = None;
+        project_args.platform_message_callback = Some(Self::platform_message_callback);
         project_args.vm_snapshot_data = std::ptr::null_mut();
         project_args.vm_snapshot_data_size = 0;
         project_args.vm_snapshot_instructions = std::ptr::null_mut();
@@ -182,13 +185,16 @@ impl AppWindowSession {
         project_args.isolate_snapshot_data_size = 0;
         project_args.isolate_snapshot_instructions = std::ptr::null_mut();
         project_args.isolate_snapshot_instructions_size = 0;
-        project_args.root_isolate_create_callback = None;
+        project_args.root_isolate_create_callback = Some(Self::root_isolate_create_callback);
         project_args.update_semantics_callback = None;
         project_args.log_message_callback = None;
-        let mut render_config = flutter_embedder::FlutterRendererConfig::default();
-        // self.compositor.c
-        let mut engine_handle: FlutterEngine = std::ptr::null_mut();
+        project_args.custom_task_runners = std::ptr::null_mut();
+        project_args.shutdown_dart_vm_when_done = true;
+        project_args.vsync_callback = Some(Self::vsync_callback);
+        project_args.log_message_callback = Some(Self::log_message_callback);
+        project_args.compositor = &compositor_config as *const FlutterCompositor;
 
+        let mut engine_handle: FlutterEngine = std::ptr::null_mut();
         if let Some(initialize) = self.engine.Initialize {
             let res = unsafe {
                 initialize(
@@ -213,6 +219,7 @@ impl AppWindowSession {
         message: *const FlutterPlatformMessage,
         user_data: *mut std::ffi::c_void,
     ) {
+        info!("platform_message_callback");
         let app = user_data as *mut AppWindowSession;
         let message = unsafe { &*message };
         unsafe {
@@ -224,6 +231,22 @@ impl AppWindowSession {
 
     fn handle_platform_message(&mut self, message: &FlutterPlatformMessage) {
         info!("Platform message received: {:?}", message);
+    }
+
+    extern "C" fn root_isolate_create_callback(user_data: *mut std::ffi::c_void) {
+        info!("root_isolate_create_callback");
+    }
+
+    extern "C" fn vsync_callback(arg1: *mut ::core::ffi::c_void, arg2: isize) {
+        info!("vsync_callback");
+    }
+
+    extern "C" fn log_message_callback(
+        arg1: *const ::core::ffi::c_char,
+        arg2: *const ::core::ffi::c_char,
+        arg3: *mut ::core::ffi::c_void,
+    ) {
+        info!("log_message_callback");
     }
 }
 
