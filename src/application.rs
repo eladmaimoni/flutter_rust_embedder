@@ -287,8 +287,8 @@ impl ApplicationHandler for App {
                 )
                 .unwrap();
 
-                let pinned_session = Box::new(window_session);
-
+                let mut pinned_session = Box::new(window_session);
+                pinned_session.initialize().unwrap();
                 self.window_session = Some(pinned_session);
             }
             Err(error) => {
