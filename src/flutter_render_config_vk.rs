@@ -74,10 +74,16 @@ fn extract_raw_vk_device(device: &wgpu::Device) -> Option<RawVkDeviceAndQueue> {
     }
 }
 
+pub struct FlutterRendererConfigWrapper {
+    pub config: FlutterRendererConfig,
+    _owned_instance_extensions: Vec<*const std::ffi::c_char>,
+    _owned_device_extensions: Vec<*const std::ffi::c_char>,
+}
+
 pub fn create_flutter_renderer_config(
     instance: &wgpu::Instance,
     device: &wgpu::Device,
-) -> FlutterRendererConfig {
+) -> FlutterRendererConfigWrapper {
     let raw_instance = extract_raw_vk_instance(&instance).unwrap();
     let raw_device = extract_raw_vk_device(&device).unwrap();
 
@@ -93,23 +99,6 @@ pub fn create_flutter_renderer_config(
         .iter()
         .map(|ext| ext.as_ptr())
         .collect();
-
-    // let vulkan_config = FlutterVulkanRendererConfig {
-    //     struct_size: size_of::<FlutterVulkanRendererConfig>(),
-    //     version: raw_instance.version,
-    //     instance: raw_instance.instance,
-    //     physical_device: raw_device.physical_device,
-    //     device: raw_device.device,
-    //     queue_family_index: raw_device.queue_family_index,
-    //     queue: raw_device.queue,
-    //     enabled_instance_extension_count: raw_instance.extensions.len(),
-    //     enabled_instance_extensions: enabled_instance_extensions.as_mut_ptr(),
-    //     enabled_device_extension_count: raw_device.extensions.len(),
-    //     enabled_device_extensions: enabled_device_extensions.as_mut_ptr(),
-    //     get_instance_proc_address_callback: None,
-    //     get_next_image_callback: None,
-    //     present_image_callback: None,
-    // };
 
     let mut config = FlutterRendererConfig::default();
     config.type_ = FlutterRendererType_kVulkan;
@@ -129,7 +118,11 @@ pub fn create_flutter_renderer_config(
     vk.get_next_image_callback = Some(get_next_image_callback);
     vk.present_image_callback = Some(present_image_callback);
 
-    config
+    FlutterRendererConfigWrapper {
+        config: config,
+        _owned_instance_extensions: enabled_instance_extensions,
+        _owned_device_extensions: enabled_device_extensions,
+    }
 }
 
 extern "C" fn present_image_callback(

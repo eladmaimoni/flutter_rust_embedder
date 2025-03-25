@@ -6,7 +6,7 @@ use crate::{
         FlutterBackingStore, FlutterBackingStoreConfig, FlutterCompositor, FlutterLayer,
         FlutterRendererConfig, FlutterVulkanInstanceHandle, FlutterVulkanRendererConfig,
     },
-    flutter_render_config_vk::create_flutter_renderer_config,
+    flutter_render_config_vk::{create_flutter_renderer_config, FlutterRendererConfigWrapper},
     utils::as_void_ptr,
 };
 
@@ -125,7 +125,7 @@ impl Compositor {
         }
     }
 
-    pub fn get_flutter_renderer_config(&mut self) -> FlutterRendererConfig {
+    pub fn get_flutter_renderer_config(&mut self) -> FlutterRendererConfigWrapper {
         return create_flutter_renderer_config(&self.instance, &self.device);
     }
 

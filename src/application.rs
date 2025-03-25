@@ -216,7 +216,7 @@ impl AppWindowSession {
             let res = unsafe {
                 initialize(
                     FLUTTER_ENGINE_VERSION as usize,
-                    &mut render_config as _,
+                    &mut render_config.config as _,
                     &mut project_args as _,
                     as_void_ptr(self),
                     &mut engine_handle as _,
