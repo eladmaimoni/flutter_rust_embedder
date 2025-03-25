@@ -1,7 +1,7 @@
 use std::ffi::CString;
 
 use ash::vk::Handle;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::{
     application::get_instance_proc_address_callback,
@@ -81,6 +81,8 @@ pub fn create_flutter_renderer_config(
     let raw_instance = extract_raw_vk_instance(&instance).unwrap();
     let raw_device = extract_raw_vk_device(&device).unwrap();
 
+    debug!("instance extensions {:?}", raw_instance.extensions);
+    debug!("device extensions {:?}", raw_device.extensions);
     let mut enabled_device_extensions: Vec<*const std::ffi::c_char> = raw_device
         .extensions
         .iter()
