@@ -97,18 +97,12 @@ impl AppWindowSession {
         window: Arc<Window>,
         gpu_context: GPUContext,
     ) -> Result<Self, AppError> {
-        let assets_path = config.asset_dir.join("flutter_assets");
-        let icu_data_path = config.asset_dir.join("icudtl.dat");
-
-        if !assets_path.exists() {
-            error!("Assets path does not exist: {:?}", assets_path);
-            return Err(AppError::PathNoFound(assets_path));
-        }
-
-        if !icu_data_path.exists() {
-            error!("ICU data path does not exist: {:?}", icu_data_path);
-            return Err(AppError::PathNoFound(icu_data_path));
-        }
+        let engine_lib = unsafe { Library::new(&config.flutter_engine_path)? };
+        let flutter_engine_get_proc_addresses = unsafe {
+            engine_lib.get::<fn(*mut FlutterEngineProcTable) -> FlutterEngineResult>(
+                b"FlutterEngineGetProcAddresses\0",
+            )?
+        };
         if !config.flutter_engine_path.exists() {
             error!(
                 "Engine not found at path: {}",
@@ -116,13 +110,6 @@ impl AppWindowSession {
             );
             return Err(AppError::PathNoFound(config.flutter_engine_path.clone()));
         }
-        let engine_lib = unsafe { Library::new(&config.flutter_engine_path)? };
-        let flutter_engine_get_proc_addresses = unsafe {
-            engine_lib.get::<fn(*mut FlutterEngineProcTable) -> FlutterEngineResult>(
-                b"FlutterEngineGetProcAddresses\0",
-            )?
-        };
-
         let mut engine = flutter_embedder::FlutterEngineProcTable::default();
         engine.struct_size = std::mem::size_of::<flutter_embedder::FlutterEngineProcTable>();
         let res = flutter_engine_get_proc_addresses(&mut engine as *mut _ as _);
@@ -183,12 +170,25 @@ impl AppWindowSession {
     }
 
     pub fn initialize(&mut self) -> Result<(), AppError> {
+        let assets_path = self.config.asset_dir.join("flutter_assets");
+        let icu_data_path = self.config.asset_dir.join("icudtl.dat");
+
+        if !assets_path.exists() {
+            error!("Assets path does not exist: {:?}", assets_path);
+            return Err(AppError::PathNoFound(assets_path));
+        }
+
+        if !icu_data_path.exists() {
+            error!("ICU data path does not exist: {:?}", icu_data_path);
+            return Err(AppError::PathNoFound(icu_data_path));
+        }
+
         let mut render_config = self.compositor.get_flutter_renderer_config();
         let compositor_config = self.compositor.get_flutter_compositor();
 
         // let flutter_renderer_config = create_flutter_renderer_config(&instance, &device);
-        let asset_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
-        let icu_data_path_str = CString::new(self.config.asset_dir.to_str().unwrap())?;
+        let asset_path_str = CString::new(assets_path.to_str().unwrap())?;
+        let icu_data_path_str = CString::new(icu_data_path.to_str().unwrap())?;
         let mut project_args = flutter_embedder::FlutterProjectArgs::default();
         project_args.struct_size = std::mem::size_of::<flutter_embedder::FlutterProjectArgs>();
         project_args.assets_path = asset_path_str.as_ptr();

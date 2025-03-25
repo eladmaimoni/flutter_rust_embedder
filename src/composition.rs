@@ -136,7 +136,8 @@ impl Compositor {
                 .map(|instance| {
                     let shared_instance = instance.shared_instance();
                     let entry = shared_instance.entry();
-                    let ptr = entry.fp_v1_0().create_instance as *mut ::core::ffi::c_void;
+                    let get_instance_proc_addr = entry.static_fn().get_instance_proc_addr;
+                    let ptr = get_instance_proc_addr as *mut ::core::ffi::c_void;
                     ptr
                 })
         };

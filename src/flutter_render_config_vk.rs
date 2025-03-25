@@ -124,8 +124,8 @@ pub fn create_flutter_renderer_config(
     vk.enabled_device_extension_count = raw_device.extensions.len();
     vk.enabled_device_extensions = enabled_device_extensions.as_mut_ptr();
     vk.get_instance_proc_address_callback = Some(get_instance_proc_address_callback);
-    vk.get_next_image_callback = None;
-    vk.present_image_callback = None;
+    vk.get_next_image_callback = Some(get_next_image_callback);
+    vk.present_image_callback = Some(present_image_callback);
 
     config
 }
