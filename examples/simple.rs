@@ -42,13 +42,17 @@ async fn main() -> Result<(), AppError> {
     let _span = info_span!("main").entered();
     info!("start app");
     // env_logger::init();
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read line");
 
     let app_config = flutter_rust_embedder::application::AppConfig {
         asset_dir: std::path::PathBuf::from(
             "C:/workspace/rusty/build/windows/x64/runner/Debug/data",
         ),
         flutter_engine_path: std::path::PathBuf::from(
-            "C:/libs/flutter/engine/src/out/host_debug/flutter_engine.dll",
+            "C:/libs/flutter/engine/src/out/host_debug_unopt/flutter_engine.dll",
         ),
     };
 

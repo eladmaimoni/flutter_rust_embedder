@@ -1,6 +1,6 @@
 use core::error;
 // use std::error;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::pin::Pin;
 // use std::fmt::Error;
@@ -27,6 +27,23 @@ pub struct GPUContext {
     pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+}
+
+pub extern "C" fn get_instance_proc_address_callback(
+    user_data: *mut ::core::ffi::c_void,
+    _instance: FlutterVulkanInstanceHandle,
+    name: *const ::core::ffi::c_char,
+) -> *mut ::core::ffi::c_void {
+    let app = user_data as *mut AppWindowSession;
+    let name = unsafe { CStr::from_ptr(name) };
+    let expected = CStr::from_bytes_with_nul(b"vkGetInstanceProcAddr\0").unwrap();
+    if name != expected {
+        error!("unexpected");
+        return std::ptr::null_mut();
+    }
+    let app = unsafe { app.as_mut().unwrap() };
+
+    app.compositor.get_instance_proc_address_callback()
 }
 
 #[derive(Clone, Debug)]
