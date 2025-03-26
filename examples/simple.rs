@@ -38,6 +38,7 @@ fn init_subscriber() {
 }
 
 #[tokio::main(flavor = "current_thread")]
+
 async fn main() -> Result<(), AppError> {
     init_subscriber();
     let _span = info_span!("main").entered();

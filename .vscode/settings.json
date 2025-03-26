@@ -3,6 +3,7 @@
     "cstdlib": "cpp",
     "algorithm": "cpp",
     "memory": "cpp",
-    "vector": "cpp"
+    "vector": "cpp",
+    "optional": "cpp"
   }
 }

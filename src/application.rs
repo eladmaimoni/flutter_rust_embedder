@@ -251,41 +251,56 @@ impl AppWindowSession {
         Ok(())
     }
 
+    fn user_data_to_self(user_data: &*mut std::ffi::c_void) -> &mut Self {
+        let app = *user_data as *mut AppWindowSession;
+        let app = unsafe { app.as_mut().unwrap() };
+        app
+    }
+
     extern "C" fn platform_message_callback(
         message: *const FlutterPlatformMessage,
         user_data: *mut std::ffi::c_void,
     ) {
         info!("platform_message_callback");
-        let app = user_data as *mut AppWindowSession;
+        let app = Self::user_data_to_self(&user_data);
         let message = unsafe { &*message };
-        unsafe {
-            if let Some(app) = app.as_mut() {
-                app.handle_platform_message(message);
-            }
-        }
+        app.handle_platform_message(message);
     }
 
     fn handle_platform_message(&mut self, message: &FlutterPlatformMessage) {
         info!("Platform message received: {:?}", message);
     }
 
-    extern "C" fn root_isolate_create_callback(user_data: *mut std::ffi::c_void) {
+    extern "C" fn root_isolate_create_callback(_user_data: *mut std::ffi::c_void) {
         info!("root_isolate_create_callback");
     }
 
-    extern "C" fn vsync_callback(arg1: *mut ::core::ffi::c_void, arg2: isize) {
+    extern "C" fn vsync_callback(user_data: *mut ::core::ffi::c_void, baton: isize) {
+        let app = Self::user_data_to_self(&user_data);
+
         info!("vsync_callback");
     }
 
     extern "C" fn log_message_callback(
-        arg1: *const ::core::ffi::c_char,
-        arg2: *const ::core::ffi::c_char,
-        arg3: *mut ::core::ffi::c_void,
+        tag: *const ::core::ffi::c_char,
+        message: *const ::core::ffi::c_char,
+        _arg3: *mut ::core::ffi::c_void,
     ) {
-        info!("log_message_callback");
+        let tag = unsafe { CStr::from_ptr(tag) }.to_string_lossy();
+        let message = unsafe { CStr::from_ptr(message) }.to_string_lossy();
+        info!("Flutter Log {}:{}", tag, message);
     }
 }
 
+impl Drop for AppWindowSession {
+    fn drop(&mut self) {
+        if let Some(shutdown) = self.engine.Shutdown {
+            if self.engine_handle != std::ptr::null_mut() {
+                unsafe { shutdown(self.engine_handle) };
+            }
+        };
+    }
+}
 pub struct App {
     config: AppConfig,
     gpu_context: GPUContext,
@@ -303,6 +318,7 @@ impl App {
 
     pub fn run(&mut self) -> Result<(), AppError> {
         let event_loop = EventLoop::new()?;
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         event_loop.run_app(self)?;
         Ok(())
     }
