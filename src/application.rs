@@ -232,6 +232,22 @@ impl AppWindowSession {
         }
 
         info!("FlutterEngineInitialize returned: {}", res);
+
+        let Some(run) = self.engine.RunInitialized else {
+            error!("FlutterEngineRunInitialized not found");
+            return Err(AppError::FlutterEngineProcTable(
+                "FlutterEngineRunInitialized".to_string(),
+            ));
+        };
+
+        let res = unsafe { run(self.engine_handle) };
+
+        if res != FlutterEngineResult_kSuccess {
+            error!("failed to run flutter");
+            return Err(AppError::FlutterEngineError(res));
+        }
+
+        info!("FlutterEngineRunInitialized returned: {}", res);
         Ok(())
     }
 
@@ -309,6 +325,7 @@ impl ApplicationHandler for App {
 
                 let mut pinned_session = Box::new(window_session);
                 pinned_session.initialize().unwrap();
+
                 self.window_session = Some(pinned_session);
             }
             Err(error) => {
