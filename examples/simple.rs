@@ -27,7 +27,8 @@ fn init_subscriber() {
         .event_format(Format::default().with_thread_ids(true));
     // .with_span_events(fmt::format::FmtSpan::ACTIVE);
 
-    let env_filter = EnvFilter::from_default_env();
+    // let env_filter = EnvFilter::from_default_env();
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let subscriber = Registry::default()
         .with(fmt_layer)
         .with(perfetto_layer)

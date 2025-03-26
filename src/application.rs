@@ -204,31 +204,34 @@ impl AppWindowSession {
         project_args.isolate_snapshot_instructions_size = 0;
         project_args.root_isolate_create_callback = Some(Self::root_isolate_create_callback);
         project_args.update_semantics_callback = None;
-        project_args.log_message_callback = None;
         project_args.custom_task_runners = std::ptr::null_mut();
         project_args.shutdown_dart_vm_when_done = true;
         project_args.vsync_callback = Some(Self::vsync_callback);
         project_args.log_message_callback = Some(Self::log_message_callback);
         project_args.compositor = &compositor_config as *const FlutterCompositor;
 
-        let mut engine_handle: FlutterEngine = std::ptr::null_mut();
-        if let Some(initialize) = self.engine.Initialize {
-            let res = unsafe {
-                initialize(
-                    FLUTTER_ENGINE_VERSION as usize,
-                    &mut render_config.config as _,
-                    &mut project_args as _,
-                    as_void_ptr(self),
-                    &mut engine_handle as _,
-                )
-            };
-            info!("FlutterEngineInitialize returned: {}", res);
-        } else {
+        let Some(initialize) = self.engine.Initialize else {
             error!("FlutterEngineInitialize not found");
             return Err(AppError::FlutterEngineProcTable(
                 "FlutterEngineInitialize".to_string(),
             ));
+        };
+        let res = unsafe {
+            initialize(
+                FLUTTER_ENGINE_VERSION as usize,
+                &mut render_config.config as _,
+                &mut project_args as _,
+                as_void_ptr(self),
+                &mut self.engine_handle as *mut FlutterEngine,
+            )
+        };
+
+        if res != FlutterEngineResult_kSuccess {
+            error!("failed to initialize flutter");
+            return Err(AppError::FlutterEngineError(res));
         }
+
+        info!("FlutterEngineInitialize returned: {}", res);
         Ok(())
     }
 
