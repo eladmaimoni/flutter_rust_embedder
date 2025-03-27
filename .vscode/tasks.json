@@ -10,5 +10,14 @@
             },
             "problemMatcher":[]
         }
+        {
+            "label": "run simple - release",
+            "type": "shell",
+            "command": "clear && cargo run --example simple --release",
+            "options": {
+                "cwd": "${workspaceFolder}",
+            },
+            "problemMatcher":[]
+        }
     ]
 }

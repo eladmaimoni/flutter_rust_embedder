@@ -22,15 +22,15 @@ fn init_subscriber() {
     let perfetto_layer =
         PerfettoLayer::new(std::sync::Mutex::new(trace_file)).with_debug_annotations(true);
 
-    let fmt_layer = fmt::layer()
-        .with_writer(std::io::stdout)
-        .event_format(Format::default().with_thread_ids(true));
-    // .with_span_events(fmt::format::FmtSpan::ACTIVE);
+    // let fmt_layer = fmt::layer()
+    //     .with_writer(std::io::stdout)
+    //     .event_format(Format::default().with_thread_ids(true));
+    // // .with_span_events(fmt::format::FmtSpan::ACTIVE);
 
     // let env_filter = EnvFilter::from_default_env();
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug"));
     let subscriber = Registry::default()
-        .with(fmt_layer)
+        // .with(fmt_layer)
         .with(perfetto_layer)
         .with(env_filter);
 
@@ -44,7 +44,7 @@ async fn main() -> Result<(), AppError> {
     let _span = info_span!("main").entered();
     info!("start app");
     // env_logger::init();
-    let mut input = String::new();
+    // let mut input = String::new();
     // std::io::stdin()
     //     .read_line(&mut input)
     //     .expect("Failed to read line");

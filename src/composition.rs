@@ -49,6 +49,10 @@ impl Compositor {
         if new_size.width == 0 || new_size.height == 0 {
             return;
         }
+        if self.surface_size.width == new_size.width && self.surface_size.height == new_size.height
+        {
+            return;
+        }
         self.surface_size = new_size;
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -59,8 +63,8 @@ impl Compositor {
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
             width: self.surface_size.width,
             height: self.surface_size.height,
-            desired_maximum_frame_latency: 2,
-            present_mode: wgpu::PresentMode::AutoVsync,
+            desired_maximum_frame_latency: 1,
+            present_mode: wgpu::PresentMode::Fifo,
         };
 
         self.surface.configure(&self.device, &surface_config);

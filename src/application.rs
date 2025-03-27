@@ -8,11 +8,13 @@ use crate::composition::Compositor;
 use crate::flutter_embedder;
 use crate::utils::as_void_ptr;
 use ash::vk::Handle;
+use chrono::Duration;
 use flutter_embedder::*;
 use libloading::Library;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, debug_span, error, info, instrument, warn};
+use winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
 // use wgpu::{Adapter, Instance};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -154,16 +156,22 @@ impl AppWindowSession {
                 info!("Window closed");
                 return true;
             }
+            WindowEvent::Moved(_new_position) => {}
             WindowEvent::Resized(new_size) => {
                 self.compositor.resize(new_size);
+                self.compositor.render();
+                // self.window.pre_present_notify();
+                self.compositor.present();
+                // self.window.request_redraw();
             }
             WindowEvent::RedrawRequested => {
                 self.compositor.render();
                 self.window.pre_present_notify();
                 self.compositor.present();
+                self.window.request_redraw();
             }
             _ => {
-                debug!("Window event: {:?}", event);
+                info!("Window event: {:?}", event);
             }
         }
         false
@@ -317,9 +325,22 @@ impl App {
     }
 
     pub fn run(&mut self) -> Result<(), AppError> {
-        let event_loop = EventLoop::new()?;
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-        event_loop.run_app(self)?;
+        let mut event_loop = EventLoop::new()?;
+        // event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        // let proxy = event_loop.create_proxy();
+        // let timeout = ;
+        // event_loop.run_app(self)?;
+        loop {
+            let _span = debug_span!("event_loop").entered();
+            // let pump_status = event_loop.pump_app_events(Some(std::time::Duration::ZERO), self);
+            let pump_status =
+                event_loop.pump_app_events(Some(std::time::Duration::from_millis(1)), self);
+
+            if let PumpStatus::Exit(val) = pump_status {
+                info!("exit code {}", val);
+                break;
+            }
+        }
         Ok(())
     }
 }
